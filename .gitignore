@@ -1,0 +1,7 @@
+# Resource files
+**/in/*
+!**/in/.gitkeep
+
+# Output files
+**/out/*
+!**/out/.gitkeep
