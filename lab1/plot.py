@@ -12,6 +12,7 @@ IN_PATH = join(ABS_PATH, "in")
 OUT_PATH = join(ABS_PATH, "out")
 DELTA = 0.001 # Delta for MASTECH MY-65
 PRECISION = 6
+PLOT_PRECISION = 3
 
 
 #
@@ -171,11 +172,13 @@ def plot_graph(data_x, data_y, popt, a0, a1, label):
 
     # Plot the fit line
     U_range = np.linspace(min(data_x), max(data_x), 100)
+    cust_label = f'Metoda nejmenších čtverců: $I = {a1:.{PLOT_PRECISION}f}U + {a0:.{PLOT_PRECISION}f}$'
+    cust_label = cust_label.replace(".", ",")
     plt.plot(U_range, linear_model(U_range, *popt), 'r-',
-             label=f'Metoda nejmenších čtverců: $I = {a1:.{PRECISION}f}U + {a0:.{PRECISION}f}$')
+             label=cust_label)
 
-    plt.xlabel('Napětí $U$ [V]')
-    plt.ylabel('Proud $I$ [A]')
+    plt.xlabel(r'Napětí $\frac{U}{V}$')
+    plt.ylabel(r'Proud $\frac{I}{A}$')
     plt.title(label)
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.legend()
@@ -184,14 +187,17 @@ def plot_graph(data_x, data_y, popt, a0, a1, label):
 def plot_graph_wattage(data_x, data_y, popt, a0, a1, a2):
     plt.figure(figsize=(8, 5))
 
-    plt.scatter(data_x, data_y, color='black', label='Změřené data (P = U * I)', marker='o', s=20)
+    plt.scatter(data_x, data_y, color='black', label=r'Změřené data (P = $U \cdot I$)', marker='o', s=20)
 
     U_range = np.linspace(min(data_x), max(data_x), 100)
-    plt.plot(U_range, quadratic_model(U_range, *popt), 'r-',
-             label=f'Metoda nejmen. čtverců (Parabola) $P = {a2:.{PRECISION}f}U^2 + {a1:.{PRECISION}f}U + {a0:.{PRECISION}f}$')
 
-    plt.xlabel("Napětí $U$ [V]")
-    plt.ylabel('Výkon $P$ [W]')
+    cust_label = f'Metoda nejmen. čtverců (Parabola) $P = {a2:.{PLOT_PRECISION}f}U^2 + {a1:.{PLOT_PRECISION}f}U + {a0:.{PLOT_PRECISION}f}$'
+    cust_label = cust_label.replace('.', ',')
+    plt.plot(U_range, quadratic_model(U_range, *popt), 'r-',
+             label=cust_label)
+
+    plt.xlabel(r"Napětí $\frac{U}{V}$")
+    plt.ylabel(r'Výkon $\frac{P}{W}$')
     plt.title('Výkon paliv. článku $P(U, I)$')
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.legend()
