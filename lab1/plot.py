@@ -1,3 +1,4 @@
+import math
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -9,6 +10,24 @@ from os.path import join
 ABS_PATH = Path(__file__).parent
 IN_PATH = join(ABS_PATH, "in")
 OUT_PATH = join(ABS_PATH, "out")
+DELTA = 0.001 # Delta for MASTECH MY-65
+PRECISION = 6
+
+
+#
+# Calculation definitions
+#
+
+def calc_type_B_uncertainty():
+    # Calculation of B-type uncertainty for Voltage and Amperage (same results, integrated into one function)
+    u_B = DELTA / math.sqrt(12)
+    return u_B
+
+
+def calc_type_B_power(I, U, u_BI, u_BU):
+    # Calculation of B-type uncertainty for Power
+    u_P = np.sqrt((I**2 * u_BU**2) + (U**2 * u_BI**2))
+    return u_P
 
 
 #
@@ -24,19 +43,27 @@ def quadratic_model(U, a2, a1, a0):
     return a2 * U**2 + a1 * U + a0
 
 
+#
+# Processing functions
+#
+
 def process_electrolyzer():
     data_in = join(IN_PATH, "lab1_elektrolyzer.data")
     U, I, = load_data(data_in)
 
-    perr, popt = model_fit(linear_model, U, I)
+    u_BI = calc_type_B_uncertainty()
+    sigma_I = np.full(len(I), u_BI)
+
+    perr, popt = model_fit(linear_model, U, I, sigma_I)
     a1, a0 = popt
+    u_c_a1, u_c_a0 = perr
 
     print_report(popt, perr)
-    electrolyzer_breakdown_voltage(a1, a0)
+    electrolyzer_breakdown_voltage(a1, a0, u_c_a1, u_c_a0)
 
-    plot_graph(U, I, popt, a0, a1, 'Voltampérová char. paliv. elektrolyzéru: $I(U)$')
+    plot_graph(U, I, popt, a0, a1, 'Voltampérová char. elektrolyzéru: $I(U)$')
 
-    out_name = "lab1_clanek_output.pdf"
+    out_name = "lab1_elektrolyzer_output.pdf"
     data_out = join(OUT_PATH, out_name)
     save_graph(data_out, out_name)
 
@@ -45,39 +72,61 @@ def process_fuel_cell():
     data_in = join(IN_PATH, "lab1_clanek.data")
     U, I = load_data(data_in)
 
-    perr, popt = model_fit(linear_model, U, I)
+    u_BI = calc_type_B_uncertainty()
+    sigma_I = np.full(len(I), u_BI)
+
+    perr, popt = model_fit(linear_model, U, I, sigma_I)
     a1, a0 = popt
 
     print_report(popt, perr)
 
     plot_graph(U, I, popt, a0, a1, 'Voltampérová char. paliv. článku: $I(U)$')
 
-    maximum_fuel_cell_wattage(U, I)
-
-    out_name = "lab1_elektrolyzer_output.pdf"
+    out_name = "lab1_clanek_output.pdf"
     data_out = join(OUT_PATH, out_name)
     save_graph(data_out, out_name)
 
-
-def electrolyzer_breakdown_voltage(a1, a0):
-    U_r = - (a0 / a1)
-
-    print(f"Electrolyzer breakdown voltage: {U_r:.2f}V")
-    print("-" * 30)
+    maximum_fuel_cell_wattage_graph(U, I)
 
 
-def maximum_fuel_cell_wattage(U, I):
+def maximum_fuel_cell_wattage_graph(U, I):
     P = U * I
 
-    perr, popt = model_fit(quadratic_model, U, P)
-    a2, a1, a0 = popt
-    print_report(popt, perr)
+    u_B_val = calc_type_B_uncertainty() # same for u_BI and u_BU
+    sigma_P = calc_type_B_power(I, U, u_B_val, u_B_val)
 
+    perr, popt = model_fit(quadratic_model, U, P, sigma_P)
+
+    a2, a1, a0 = popt
+    u_c_a2, u_c_a1, u_c_a0 = perr
+
+    print_report(popt, perr)
+    maximum_fuel_cell_wattage(a2, a1, a0, u_c_a2, u_c_a1, u_c_a0)
     plot_graph_wattage(U, P, popt, a0, a1, a2)
 
     out_name = "lab1_clanek_output_wattage.pdf"
     data_out = join(OUT_PATH, out_name)
     save_graph(data_out, out_name)
+
+
+#
+# Helper functions
+#
+
+def electrolyzer_breakdown_voltage(a1, a0, u_c_a1, u_c_a0):
+    U_r = - (a0 / a1)
+    u_U_r = math.sqrt((-(1 / a1) * u_c_a0)**2 + ((a0 / a1**2) * u_c_a1)**2)
+
+    print(f"Electrolyzer breakdown voltage: {U_r:.{PRECISION}}V ± {u_U_r:.{PRECISION}f}")
+    print("-" * 30)
+
+
+def maximum_fuel_cell_wattage(a2, a1, a0, u_c_a2, u_c_a1, u_c_a0):
+    P_max = a0 - (a1 ** 2) / (4 * a2)
+    u_P_max = math.sqrt(u_c_a0**2 + (-(a1 / (2 * a2)) * u_c_a1)**2 + ((a1**2) / (4 * (a2**2)) * u_c_a2)**2)
+
+    print(f"Maximum fuel cell wattage: {P_max:.{PRECISION}f}W ± {u_P_max:.{PRECISION}f}")
+    print("-" * 30)
 
 
 def load_data(load_str):
@@ -89,9 +138,16 @@ def load_data(load_str):
 
 
 # 3. Curve model fit
-def model_fit(model_type, data_x, data_y):
+def model_fit(model_type, data_x, data_y, sigma_array):
     # popt = optimal parameters, pcov = covariance matrix (for errors)
-    popt, pcov = curve_fit(model_type, data_x, data_y)
+
+    popt, pcov = curve_fit(
+        model_type,
+        data_x,
+        data_y,
+        sigma=sigma_array,
+        absolute_sigma=True
+    )
     perr = np.sqrt(np.diag(pcov)) # Standard deviations for errors
 
     return perr, popt
@@ -102,7 +158,7 @@ def print_report(popt, err):
     print("-" * 30)
     print("FIT RESULTS:")
     for i, val in enumerate(popt):
-        print(f"Parametr a{len(popt)-1-i}: {val:.4f} ± {err[i]:.4f}")
+        print(f"Parametr a{len(popt)-1-i}: {val:.{PRECISION}f} ± {err[i]:.{PRECISION}f}")
     print("-" * 30)
 
 
@@ -116,7 +172,7 @@ def plot_graph(data_x, data_y, popt, a0, a1, label):
     # Plot the fit line
     U_range = np.linspace(min(data_x), max(data_x), 100)
     plt.plot(U_range, linear_model(U_range, *popt), 'r-',
-             label=f'Metoda nejmenších čtverců: $I = {a1:.2f}U + {a0:.2f}$')
+             label=f'Metoda nejmenších čtverců: $I = {a1:.{PRECISION}f}U + {a0:.{PRECISION}f}$')
 
     plt.xlabel('Napětí $U$ [V]')
     plt.ylabel('Proud $I$ [A]')
@@ -132,7 +188,7 @@ def plot_graph_wattage(data_x, data_y, popt, a0, a1, a2):
 
     U_range = np.linspace(min(data_x), max(data_x), 100)
     plt.plot(U_range, quadratic_model(U_range, *popt), 'r-',
-             label=f'Metoda nejmen. čtverců (Parabola) $P = {a2:.2f}U^2 + {a1:.2f}U + {a0:.2f}$')
+             label=f'Metoda nejmen. čtverců (Parabola) $P = {a2:.{PRECISION}f}U^2 + {a1:.{PRECISION}f}U + {a0:.{PRECISION}f}$')
 
     plt.xlabel("Napětí $U$ [V]")
     plt.ylabel('Výkon $P$ [W]')
