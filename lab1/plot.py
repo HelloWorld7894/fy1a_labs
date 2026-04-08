@@ -10,18 +10,32 @@ from os.path import join
 ABS_PATH = Path(__file__).parent
 IN_PATH = join(ABS_PATH, "in")
 OUT_PATH = join(ABS_PATH, "out")
-DELTA = 0.001 # Delta for MASTECH MY-65
 PRECISION = 6
 PLOT_PRECISION = 3
 
+# MASTECH MY-65 SPECS
+DELTA = 0.001
+VOLTAGE_DIGIT_PRECISION = 3
+AMPERAGE_DIGIT_PRECISION = 10
+VOLTAGE_PRECISION = 0.1
+AMPERAGE_PRECISION = 2.0
 
 #
 # Calculation definitions
 #
 
-def calc_type_B_uncertainty():
-    # Calculation of B-type uncertainty for Voltage and Amperage (same results, integrated into one function)
-    u_B = DELTA / math.sqrt(12)
+
+def calc_type_BU_uncertainty(U):
+    # Calculation of B-type uncertainty for Voltage
+    delta_max = (VOLTAGE_PRECISION / 100) * np.abs(U) + (VOLTAGE_DIGIT_PRECISION * DELTA)
+    u_B = delta_max / np.sqrt(3)
+    return u_B
+
+
+def calc_type_BI_uncertainty(I):
+    # Calculation of B-type uncertainty for Amperage
+    delta_max = (AMPERAGE_PRECISION / 100) * np.abs(I) + (AMPERAGE_DIGIT_PRECISION * DELTA)
+    u_B = delta_max / np.sqrt(3)
     return u_B
 
 
@@ -52,10 +66,9 @@ def process_electrolyzer():
     data_in = join(IN_PATH, "lab1_elektrolyzer.data")
     U, I, = load_data(data_in)
 
-    u_BI = calc_type_B_uncertainty()
-    sigma_I = np.full(len(I), u_BI)
+    u_BI = calc_type_BI_uncertainty(I)
 
-    perr, popt = model_fit(linear_model, U, I, sigma_I)
+    perr, popt = model_fit(linear_model, U, I, u_BI)
     a1, a0 = popt
     u_c_a1, u_c_a0 = perr
 
@@ -73,10 +86,9 @@ def process_fuel_cell():
     data_in = join(IN_PATH, "lab1_clanek.data")
     U, I = load_data(data_in)
 
-    u_BI = calc_type_B_uncertainty()
-    sigma_I = np.full(len(I), u_BI)
+    u_BI = calc_type_BI_uncertainty(I)
 
-    perr, popt = model_fit(linear_model, U, I, sigma_I)
+    perr, popt = model_fit(linear_model, U, I, u_BI)
     a1, a0 = popt
 
     print_report(popt, perr)
@@ -93,8 +105,9 @@ def process_fuel_cell():
 def maximum_fuel_cell_wattage_graph(U, I):
     P = U * I
 
-    u_B_val = calc_type_B_uncertainty() # same for u_BI and u_BU
-    sigma_P = calc_type_B_power(I, U, u_B_val, u_B_val)
+    u_BU = calc_type_BU_uncertainty(U)
+    u_BI = calc_type_BI_uncertainty(I)
+    sigma_P = calc_type_B_power(I, U, u_BI, u_BU)
 
     perr, popt = model_fit(quadratic_model, U, P, sigma_P)
 
@@ -168,12 +181,12 @@ def plot_graph(data_x, data_y, popt, a0, a1, label):
     plt.figure(figsize=(8, 5))
 
     # Plot the raw data points
-    plt.scatter(data_x, data_y, color='black', label='Změřené data', marker='o', s=20)
+    plt.scatter(data_x, data_y, color='black', label='Změřená data', marker='o', s=20)
 
     # Plot the fit line
     U_range = np.linspace(min(data_x), max(data_x), 100)
     cust_label = f'Metoda nejmenších čtverců: $I = {a1:.{PLOT_PRECISION}f}U + {a0:.{PLOT_PRECISION}f}$'
-    cust_label = cust_label.replace(".", ",")
+    cust_label = cust_label.replace(".", ",").replace("+ -", "-")
     plt.plot(U_range, linear_model(U_range, *popt), 'r-',
              label=cust_label)
 
@@ -187,7 +200,7 @@ def plot_graph(data_x, data_y, popt, a0, a1, label):
 def plot_graph_wattage(data_x, data_y, popt, a0, a1, a2):
     plt.figure(figsize=(8, 5))
 
-    plt.scatter(data_x, data_y, color='black', label=r'Změřené data (P = $U \cdot I$)', marker='o', s=20)
+    plt.scatter(data_x, data_y, color='black', label=r'Změřená data (P = $U \cdot I$)', marker='o', s=20)
 
     U_range = np.linspace(min(data_x), max(data_x), 100)
 
