@@ -20,7 +20,7 @@ TEMPERATURE_PRECISION = 0.05
 
 # GW Instek GDM-8342 specs
 RESISTANCE_DELTA = 0.01
-RESISTANCE_DIGIT_PRECISION = 4
+RESISTANCE_DIGIT_PRECISION = 5
 RESISTANCE_PRECISION = 0.1
 
 
@@ -29,7 +29,7 @@ RESISTANCE_PRECISION = 0.1
 #
 
 def linear_model(t, a1, a0):
-    # Linear function: R(t) = b + a * t
+    # Linear function: R(t) = a1 + a0 * t
     return a1 * t + a0
 
 
